@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, Iterator, List, Optional
+from typing import Any, Callable, Dict, Generator, Iterator, List, Optional
 
+from config import THINK_CLOSE, THINK_OPEN
 from session import Session, messages_to_prompt_text
 
 
@@ -22,6 +24,43 @@ def closing_stream(stream: Any) -> Iterator[Any]:
                 close()
             except Exception:
                 pass
+
+
+def with_max_tokens(params: Any, max_tokens: int) -> Any:
+    p = copy.copy(params)  # shallow: dataclass fields only, no __init__ replay
+    p.max_tokens = max(16, int(max_tokens))
+    return p
+
+
+def budget_thinking(
+    session: Session,
+    stream: Generator[str, None, None],
+    budget: int,
+    resume: Callable[[str, int], Generator[str, None, None]],
+) -> Generator[str, None, None]:
+    # Qwen's thinking budget is a harness job, not a model one: count the tokens
+    # spent inside an open <think>, and once they pass the cap force the block
+    # shut and resume from the truncated reasoning. Streams yield one token at a
+    # time cumulatively, so a yield count is the token count.
+    if budget <= 0:
+        yield from stream
+        return
+    sent, spent, capped = "", 0, False
+    with closing_stream(stream):
+        for text in stream:
+            if THINK_OPEN in text and THINK_CLOSE not in text:
+                spent += 1
+                if spent > budget:
+                    capped = True
+                    break
+            yield text
+            sent = text
+    # A Stop landing on the cap must not buy a whole extra prefill.
+    if not capped or session.stop_requested:
+        return
+    head = f"{sent}\n{THINK_CLOSE}\n\n"
+    yield head
+    yield from resume(head, spent)
 
 
 @dataclass

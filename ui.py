@@ -12,6 +12,7 @@ from budget import token_meter_markdown
 from config import (
     BACKENDS, DEFAULT_BACKEND, DEFAULT_SYSTEM_PROMPT, DEFAULT_MODELS_DIR,
     SHOW_ADVANCED_AT_STARTUP, WEB_USE_IN_CHAT, WEB_N_PAGES, Range,
+    ENABLE_THINKING, THINKING_BUDGET,
     RANGE_MAX_TOKENS, RANGE_TEMPERATURE, RANGE_TOP_P, RANGE_TOP_K, RANGE_REPEAT_PENALTY,
     RANGE_N_CTX, RANGE_GGUF_N_CTX, RANGE_N_GPU_LAYERS, RANGE_MEDIA_CAP,
     RANGE_THINKING_BUDGET, RANGE_WEB_PAGES, is_vlm,
@@ -158,10 +159,6 @@ def build_ui() -> gr.Blocks:
                             )
                             vlm_max_tokens = _knob(RANGE_MAX_TOKENS, vlm_d.max_tokens, "Max tokens (generation)")
                             vlm_temperature = _knob(RANGE_TEMPERATURE, vlm_d.temperature, "Temperature")
-                            vlm_enable_thinking = gr.Checkbox(
-                                label="Enable thinking", value=vlm_d.enable_thinking,
-                                info="Reasoning VLMs only, e.g. Qwen3-VL.",
-                            )
 
                             with gr.Group(visible=SHOW_ADVANCED_AT_STARTUP) as vlm_advanced:
                                 gr.Markdown("**Advanced — sampling**")
@@ -185,12 +182,6 @@ def build_ui() -> gr.Blocks:
                                 vlm_media_cap = _knob(
                                     RANGE_MEDIA_CAP, vlm_d.media_history_cap,
                                     "Max images resent (most recent first)",
-                                )
-
-                                gr.Markdown("---\n**Advanced — thinking**")
-                                vlm_thinking_budget = _knob(
-                                    RANGE_THINKING_BUDGET, vlm_d.thinking_budget,
-                                    "Thinking budget in tokens (0 = uncapped)",
                                 )
 
                             with gr.Row():
@@ -278,6 +269,17 @@ def build_ui() -> gr.Blocks:
                     send_btn = gr.Button("Send", variant="primary")
                     stop_btn = gr.Button("Stop")
                     clear_btn = gr.Button("Clear")
+                # Outside settings_col: thinking is worth flipping per message,
+                # so it stays reachable in the basic view.
+                with gr.Row():
+                    think_on = gr.Checkbox(
+                        label="💭 Thinking", value=ENABLE_THINKING, scale=0, min_width=150,
+                        info="Reasoning models only, e.g. Qwen3.",
+                    )
+                    think_budget = _knob(
+                        RANGE_THINKING_BUDGET, THINKING_BUDGET,
+                        "Thinking budget in tokens (0 = uncapped)", scale=2,
+                    )
 
                 _init_backend = get_backend(DEFAULT_BACKEND)
                 _init_params = params_for(DEFAULT_BACKEND, mlx_d, gguf_d, vlm_d)
@@ -298,13 +300,14 @@ def build_ui() -> gr.Blocks:
         vlm_inputs = [
             vlm_model_id, vlm_max_tokens, vlm_temperature, vlm_top_p, vlm_top_k,
             vlm_repeat_penalty, vlm_n_ctx_estimate, vlm_resend_media,
-            vlm_media_cap, vlm_enable_thinking, vlm_thinking_budget,
+            vlm_media_cap,
         ]
         chat_core = [
             user_input, user_input_mm,
             backend,
             mlx_model_id, mlx_max_tokens, mlx_temperature, mlx_top_p, mlx_top_k, mlx_repeat_penalty, mlx_n_ctx_estimate,
             gguf_model_path, gguf_n_ctx, gguf_n_gpu_layers, gguf_seed, gguf_max_tokens, gguf_temperature, gguf_top_p, gguf_top_k, gguf_repeat_penalty,
+            think_on, think_budget,
         ]
         chat_inputs = chat_core + vlm_inputs
         # web-search inputs sit before the VLM block so on_user_submit keeps it as *vlm_args.

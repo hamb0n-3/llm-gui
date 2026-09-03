@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Generator, List, Optional
 
 import deps
-from backend_base import Backend, Prepared, closing_stream
+from backend_base import Backend, Prepared, budget_thinking, closing_stream, with_max_tokens
 from config import RANGE_N_CTX, MLX_N_CTX_ESTIMATE, clamp_ctx
 from modelscan import (
     looks_like_gguf, read_model_config, config_is_multimodal,
@@ -114,13 +114,29 @@ class MlxBackend(Backend):
     # ---- generation ------------------------------------------------------
     def prepare(self, session: Session, params: Any, web_ctx: str) -> Prepared:
         messages = augment_messages_with_context(build_messages(session, ""), web_ctx)
-        prompt = apply_mlx_chat_template(self.tokenizer, messages, add_generation_prompt=True)
+        prompt = apply_mlx_chat_template(
+            self.tokenizer, messages, add_generation_prompt=True,
+            enable_thinking=bool(params.enable_thinking),
+        )
         return Prepared(prompt=prompt)
 
     def generate_stream(self, session: Session, params: Any, prepared: Prepared) -> Generator[str, None, None]:
+        prompt = prepared.prompt or ""
+        # The resume re-prefills, so it must generate against what is left of
+        # max_tokens: the shrink step already sized that to the context window.
+        return budget_thinking(
+            session,
+            self._stream(session, params, prompt),
+            int(params.thinking_budget),
+            lambda head, spent: self._stream(
+                session, with_max_tokens(params, int(params.max_tokens) - spent),
+                prompt + head, head,
+            ),
+        )
+
+    def _stream(self, session: Session, params: Any, prompt: str, prefix: str = "") -> Generator[str, None, None]:
         # mlx-lm >= 0.19 takes sampling via sampler/logits_processors; older
         # releases took temp/top_p/... as kwargs. Falls back to non-streaming.
-        prompt = prepared.prompt or ""
 
         def _chunk_text(resp: Any) -> str:
             # GenerationResponse (modern) or plain str (legacy); both deltas.
@@ -182,19 +198,19 @@ class MlxBackend(Backend):
                             chunk = _chunk_text(resp)
                             if chunk:
                                 text += chunk
-                                yield warn + text
+                                yield prefix + warn + text
                     return
                 except TypeError as e:
                     last_err = e
                     if text:
                         # Failed after output: report rather than regenerate.
-                        yield warn + text + f"\n\n❌ MLX generation error: {e}"
+                        yield prefix + warn + text + f"\n\n❌ MLX generation error: {e}"
                         return
                     continue  # signature mismatch before output: try simpler kwargs
                 except Exception as e:
                     last_err = e
                     if text:
-                        yield warn + text + f"\n\n❌ MLX generation error: {e}"
+                        yield prefix + warn + text + f"\n\n❌ MLX generation error: {e}"
                         return
                     break  # runtime failure: fall through to non-streaming
 
@@ -202,7 +218,7 @@ class MlxBackend(Backend):
         for kws in attempts:
             try:
                 out = deps.mlx_generate(self.model, self.tokenizer, prompt=prompt, **kws)
-                yield _fallback_warning(kws) + str(out)
+                yield prefix + _fallback_warning(kws) + str(out)
                 return
             except TypeError as e:
                 last_err = e
@@ -211,4 +227,4 @@ class MlxBackend(Backend):
                 last_err = e
                 break
 
-        yield f"❌ MLX generation error: {last_err}"
+        yield prefix + f"❌ MLX generation error: {last_err}"

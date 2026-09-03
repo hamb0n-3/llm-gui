@@ -3,18 +3,27 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def apply_mlx_chat_template(tokenizer: Any, messages: List[Dict[str, str]], add_generation_prompt: bool = True) -> str:
+def apply_mlx_chat_template(
+    tokenizer: Any,
+    messages: List[Dict[str, str]],
+    add_generation_prompt: bool = True,
+    enable_thinking: Optional[bool] = None,
+) -> str:
     # transformers 5 raises ValueError when the tokenizer has no template; gate
     # like mlx_lm.generate does (has_chat_template also covers callable templates).
     _has_tmpl = getattr(tokenizer, "has_chat_template", None)
     if _has_tmpl is None:
         _has_tmpl = bool(getattr(tokenizer, "chat_template", None))
+    # Unknown template vars are ignored by Jinja, so this is a no-op on models
+    # that have no reasoning mode.
+    extra = {} if enable_thinking is None else {"enable_thinking": bool(enable_thinking)}
     if hasattr(tokenizer, "apply_chat_template") and _has_tmpl:
         try:
             return tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
                 add_generation_prompt=add_generation_prompt,
+                **extra,
             )
         except TypeError:
             # Older tokenizers may not support add_generation_prompt

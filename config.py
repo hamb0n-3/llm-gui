@@ -94,8 +94,13 @@ VLM_N_CTX_ESTIMATE = 250000  # only when context auto-detect fails
 # large prefill block every generation.
 VLM_RESEND_HISTORY_MEDIA = False
 VLM_MEDIA_HISTORY_CAP = 4  # most-recent images kept when resending
-VLM_ENABLE_THINKING = True
-VLM_THINKING_BUDGET = 0  # 0 = no budget cap
+
+# Global across backends. MLX/MLX-VLM get it as a chat-template kwarg; GGUF has
+# no way to pass one through llama-cpp-python, so it uses Qwen's soft switch.
+ENABLE_THINKING = True
+THINKING_BUDGET = 0  # 0 = uncapped; enforced by the harness, not the model
+THINK_OPEN, THINK_CLOSE = "<think>", "</think>"
+THINK_OFF_TAG = "/no_think"
 
 WEB_USE_IN_CHAT = False
 WEB_N_PAGES = 3

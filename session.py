@@ -1,10 +1,27 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from config import DEFAULT_BACKEND, DEFAULT_SYSTEM_PROMPT, MEDIA_KINDS
+
+# Unclosed blocks match to end-of-string so a live stream collapses too.
+_THINK_RE = re.compile(r"<think(?:ing)?>(.*?)(</think(?:ing)?>|$)", re.S)
+
+
+def collapse_thinking(text: str) -> str:
+    # Display only — history keeps the raw block so the prompt is unchanged.
+    def _fold(m: "re.Match[str]") -> str:
+        inner = m.group(1).strip()
+        if not inner:
+            return ""  # thinking off: templates still emit an empty block
+        done = bool(m.group(2))
+        label = "Thinking" if done else "Thinking…"
+        return (f"\n<details{'' if done else ' open'}><summary>💭 {label}</summary>"
+                f"\n\n{inner}\n\n</details>\n\n")
+    return _THINK_RE.sub(_fold, text) if "<think" in text else text
 
 
 @dataclass
@@ -54,9 +71,9 @@ def chat_view(session: Session) -> List[Dict[str, Any]]:
         for kind in MEDIA_KINDS:
             for p in media[kind]:
                 view.append({"role": role, "content": {"path": p}})
-        content = m.get("content", "")
+        content = str(m.get("content", ""))
         if content or not has_media(m):
-            view.append({"role": role, "content": str(content)})
+            view.append({"role": role, "content": collapse_thinking(content) if role == "assistant" else content})
     if session.pending_note:
         view.append({"role": "assistant", "content": session.pending_note})
     return view

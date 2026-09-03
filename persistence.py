@@ -29,7 +29,12 @@ def snapshot_session(
     from params import VLMParams
     vlm_params = vlm_params or VLMParams()
     ctx = _context_window(backend, mlx_params, gguf_params, vlm_params)
-    mdl_info: Dict[str, Any] = {"backend": backend}
+    params = params_for(backend, mlx_params, gguf_params, vlm_params)
+    mdl_info: Dict[str, Any] = {
+        "backend": backend,
+        "enable_thinking": params.enable_thinking,
+        "thinking_budget": params.thinking_budget,
+    }
     if is_vlm(backend):
         mdl_info.update({
             "model_id_or_path": vlm_params.model_id_or_path,
@@ -41,8 +46,6 @@ def snapshot_session(
             "repeat_penalty": vlm_params.repeat_penalty,
             "resend_history_media": vlm_params.resend_history_media,
             "media_history_cap": vlm_params.media_history_cap,
-            "enable_thinking": vlm_params.enable_thinking,
-            "thinking_budget": vlm_params.thinking_budget,
         })
     elif is_mlx(backend):
         mdl_info.update({

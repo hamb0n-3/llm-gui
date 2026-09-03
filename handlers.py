@@ -276,6 +276,8 @@ def on_user_submit(
     gguf_top_p: float,
     gguf_top_k: int,
     gguf_repeat_penalty: float,
+    enable_thinking: bool = True,
+    thinking_budget: int = 0,
     use_web: bool = False,
     web_n_pages: int = 3,
     show_advanced: bool = True,
@@ -329,6 +331,7 @@ def on_user_submit(
     mlx_params, gguf_params, vlm_params = build_params(
         mlx_model_id, mlx_max_tokens, mlx_temperature, mlx_top_p, mlx_top_k, mlx_repeat_penalty, mlx_n_ctx_estimate,
         gguf_model_path, gguf_n_ctx, gguf_n_gpu_layers, gguf_seed, gguf_max_tokens, gguf_temperature, gguf_top_p, gguf_top_k, gguf_repeat_penalty,
+        enable_thinking, thinking_budget,
         *vlm_args,
     )
 
@@ -523,11 +526,14 @@ def on_input_change(
     gguf_top_p: float,
     gguf_top_k: int,
     gguf_repeat_penalty: float,
+    enable_thinking: bool = True,
+    thinking_budget: int = 0,
     *vlm_args: Any,
 ) -> str:
     mlx_params, gguf_params, vlm_params = build_params(
         mlx_model_id, mlx_max_tokens, mlx_temperature, mlx_top_p, mlx_top_k, mlx_repeat_penalty, mlx_n_ctx_estimate,
         gguf_model_path, gguf_n_ctx, gguf_n_gpu_layers, gguf_seed, gguf_max_tokens, gguf_temperature, gguf_top_p, gguf_top_k, gguf_repeat_penalty,
+        enable_thinking, thinking_budget,
         *vlm_args,
     )
     be = get_backend(backend)
@@ -564,11 +570,14 @@ def on_save_json(
     gguf_top_p: float,
     gguf_top_k: int,
     gguf_repeat_penalty: float,
+    enable_thinking: bool = True,
+    thinking_budget: int = 0,
     *vlm_args: Any,
 ) -> Tuple[str, str]:
     mlx_params, gguf_params, vlm_params = build_params(
         mlx_model_id, mlx_max_tokens, mlx_temperature, mlx_top_p, mlx_top_k, mlx_repeat_penalty, mlx_n_ctx_estimate,
         gguf_model_path, gguf_n_ctx, gguf_n_gpu_layers, gguf_seed, gguf_max_tokens, gguf_temperature, gguf_top_p, gguf_top_k, gguf_repeat_penalty,
+        enable_thinking, thinking_budget,
         *vlm_args,
     )
     return save_chat_json(session, backend, mlx_params, gguf_params, vlm_params)
